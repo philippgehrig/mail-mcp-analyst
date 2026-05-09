@@ -3,142 +3,165 @@
 ## Prerequisites
 
 - Unraid 6.12+ with Docker enabled
-- Community Applications plugin installed (recommended)
-- Ollama container running (or you'll set one up below)
+- Docker Compose plugin installed (available via Community Applications)
 
-## Step 1: Set Up Ollama (if not already running)
+## Step 1: Create Directory Structure
 
-1. Go to **Docker** tab in Unraid
-2. Click **Add Container**
-3. Configure:
-   - **Name:** `ollama`
-   - **Repository:** `ollama/ollama`
-   - **Network Type:** `bridge` (or your custom network)
-   - **Port Mapping:** `11434` → `11434`
-   - Add a **Path** mapping:
-     - **Container Path:** `/root/.ollama`
-     - **Host Path:** `/mnt/user/appdata/ollama`
-4. Click **Apply**
-5. Once running, open Unraid terminal and pull the model:
-   ```bash
-   docker exec ollama ollama pull gemma2:2b
-   ```
+Open an Unraid terminal (or SSH in) and create the app directory:
+
+```bash
+mkdir -p /mnt/user/appdata/mail-map-analyst/config
+```
 
 ## Step 2: Create Configuration Files
 
-1. Create the rules file on your Unraid server:
-   ```bash
-   mkdir -p /mnt/user/appdata/mail-map-analyst
-   ```
+### rules.yaml
 
-2. Create `/mnt/user/appdata/mail-map-analyst/rules.yaml`:
-   ```yaml
-   mailbox: INBOX
-   rules:
-     - name: newsletters
-       description: "Marketing emails, digests, automated content from subscriptions"
-       actions:
-         - action: move
-           target: Newsletters
+Create `/mnt/user/appdata/mail-map-analyst/config/rules.yaml`:
 
-     - name: receipts
-       description: "Purchase confirmations, invoices, payment notifications"
-       actions:
-         - action: move
-           target: Receipts
-         - action: mark_read
+```yaml
+mailbox: INBOX
+rules:
+  - name: newsletters
+    description: "Marketing emails, digests, automated content from subscriptions"
+    actions:
+      - action: move
+        target: Newsletters
 
-     - name: action-required
-       description: "Emails that explicitly ask me to do something or need a reply"
-       actions:
-         - action: flag
-       prompt: "Extract the deadline if mentioned, respond with just the date or 'none'"
+  - name: receipts
+    description: "Purchase confirmations, invoices, payment notifications"
+    actions:
+      - action: move
+        target: Receipts
+      - action: mark_read
 
-     - name: default
-       description: "Anything that doesn't match the above rules stays in INBOX"
-       actions:
-         - action: none
-   ```
+  - name: action-required
+    description: "Emails that explicitly ask me to do something or need a reply"
+    actions:
+      - action: flag
+    prompt: "Extract the deadline if mentioned, respond with just the date or 'none'"
 
-   Customize the rules to match your needs.
-
-## Step 3: Add mail-map-analyst Container
-
-1. Go to **Docker** tab → **Add Container**
-2. Configure:
-
-   | Field | Value |
-   |-------|-------|
-   | **Name** | `mail-map-analyst` |
-   | **Repository** | `thisphilipp/mail-map-analyst:latest` |
-   | **Network Type** | Same network as Ollama (e.g., `bridge`) |
-
-3. Add the following **Variables** (click "Add another Path, Port, Variable, Label or Device" → select "Variable"):
-
-   | Name | Value |
-   |------|-------|
-   | `IMAP_HOST` | Your mail server (e.g., `imap.gmail.com`) |
-   | `IMAP_PORT` | `993` |
-   | `SMTP_HOST` | Your SMTP server (e.g., `smtp.gmail.com`) |
-   | `SMTP_PORT` | `587` |
-   | `MAIL_USER` | Your email address |
-   | `MAIL_PASSWORD` | Your email password or app password |
-   | `MAIL_FROM` | Your email address |
-   | `OLLAMA_URL` | `http://ollama:11434` (if on same Docker network) or `http://<unraid-ip>:11434` |
-   | `OLLAMA_MODEL` | `gemma2:2b` |
-   | `MODE` | `daemon` |
-   | `INTERVAL` | `15m` |
-   | `LOG_LEVEL` | `info` |
-
-4. Add a **Path** mapping:
-
-   | Container Path | Host Path | Access Mode |
-   |---------------|-----------|-------------|
-   | `/app/config/rules.yaml` | `/mnt/user/appdata/mail-map-analyst/rules.yaml` | Read Only |
-
-5. Click **Apply**
-
-## Step 4: Networking
-
-If both containers use the default `bridge` network, `http://ollama:11434` should work as the `OLLAMA_URL`. If not, use your Unraid server's IP address instead:
-
-```
-OLLAMA_URL=http://192.168.1.x:11434
+  - name: default
+    description: "Anything that doesn't match the above rules stays in INBOX"
+    actions:
+      - action: none
 ```
 
-Alternatively, create a custom Docker network for both containers to share:
+Customize the rules to match your needs.
+
+### .env
+
+Create `/mnt/user/appdata/mail-map-analyst/.env`:
+
+```
+IMAP_HOST=imap.example.com
+IMAP_PORT=993
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+MAIL_USER=you@example.com
+MAIL_PASSWORD=your-app-password
+MAIL_FROM=you@example.com
+OLLAMA_URL=http://ollama:11434
+OLLAMA_MODEL=gemma2:2b
+MODE=daemon
+INTERVAL=15m
+LOG_LEVEL=info
+```
+
+### docker-compose.yml
+
+Create `/mnt/user/appdata/mail-map-analyst/docker-compose.yml`:
+
+```yaml
+services:
+  analyst:
+    image: thisphilipp/mail-map-analyst:latest
+    container_name: mail-map-analyst
+    env_file: .env
+    volumes:
+      - ./config/rules.yaml:/app/config/rules.yaml:ro
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama
+    container_name: mail-map-analyst-ollama
+    volumes:
+      - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  ollama_data:
+```
+
+> **Already running Ollama?** If you have an existing Ollama container, remove the `ollama` service from the compose file and set `OLLAMA_URL=http://<unraid-ip>:11434` in your `.env` instead.
+
+## Step 3: Start the Stack
 
 ```bash
-docker network create mail-analyst-net
+cd /mnt/user/appdata/mail-map-analyst
+docker compose up -d
 ```
 
-Then set both containers to use `mail-analyst-net` as their network.
+On first start, the analyst will pull the Gemma 2B model into Ollama automatically. This may take a few minutes depending on your internet connection.
 
-## Step 5: Verify
+## Step 4: Verify
 
-1. Check the container logs in the Unraid Docker tab (click the container icon → **Logs**)
-2. You should see:
-   ```json
-   {"ts":"...","level":"info","msg":"Starting mail-map-analyst","mode":"daemon","model":"gemma2:2b"}
-   {"ts":"...","level":"info","msg":"Connected to mail-mcp"}
-   {"ts":"...","level":"info","msg":"Daemon started","intervalMs":900000}
+Check the logs:
+
+```bash
+docker compose logs analyst -f
+```
+
+You should see:
+
+```json
+{"ts":"...","level":"info","msg":"Starting mail-map-analyst","mode":"daemon","model":"gemma2:2b"}
+{"ts":"...","level":"info","msg":"Connected to mail-mcp"}
+{"ts":"...","level":"info","msg":"Daemon started","intervalMs":900000}
+```
+
+Send yourself a test email and wait for the next poll interval. Check that it gets moved/flagged according to your rules.
+
+## Updating
+
+```bash
+cd /mnt/user/appdata/mail-map-analyst
+docker compose pull
+docker compose up -d
+```
+
+## Using Scheduled Mode Instead
+
+If you prefer to run the analyst periodically rather than continuously (saves resources):
+
+1. Set `MODE=scheduled` in your `.env`
+2. Remove the `restart: unless-stopped` from the analyst service
+3. Use Unraid's User Scripts plugin or cron to run:
+   ```bash
+   cd /mnt/user/appdata/mail-map-analyst && docker compose up analyst
    ```
-3. Send yourself a test email and wait for the next poll interval
-4. Check that the email was moved/flagged according to your rules
+   on your desired schedule (e.g., every 15 minutes).
 
 ## Troubleshooting
 
 ### Container won't start
-- Check that all required environment variables are set (especially `IMAP_HOST`, `SMTP_HOST`, `MAIL_USER`, `MAIL_PASSWORD`, `MODE`)
-- Verify the rules.yaml path mapping is correct
+- Check that all required environment variables are set in `.env`
+- Verify the rules.yaml path is correct: `docker compose config` will show resolved paths
 
 ### "Cannot reach Ollama" error
-- Verify Ollama container is running
-- Check the `OLLAMA_URL` — if containers aren't on the same network, use the host IP
-- Test connectivity: `docker exec mail-map-analyst wget -qO- http://ollama:11434/api/tags`
+- Check Ollama is healthy: `docker compose ps`
+- If using an external Ollama, verify the URL and that it's reachable from the analyst container
 
 ### Emails not being sorted
-- Check `LOG_LEVEL=debug` for detailed classification output
+- Set `LOG_LEVEL=debug` in `.env` and restart for detailed classification output
 - Verify your IMAP credentials work (test with another email client)
 - Ensure the mailbox name in `rules.yaml` matches your server (usually `INBOX`)
 
@@ -146,9 +169,3 @@ Then set both containers to use `mail-analyst-net` as their network.
 - Enable IMAP in Gmail settings
 - Use an [App Password](https://myaccount.google.com/apppasswords) instead of your regular password
 - IMAP host: `imap.gmail.com`, SMTP host: `smtp.gmail.com`
-
-## Updating
-
-To update to a newer version:
-1. Docker tab → click the container icon → **Force Update**
-2. Or pull manually: `docker pull thisphilipp/mail-map-analyst:latest` and recreate
