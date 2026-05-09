@@ -1,23 +1,10 @@
 services:
   analyst:
-    build: .
+    image: thisphilipp/mail-map-analyst:latest
     env_file: .env
     volumes:
       - ./config/rules.yaml:/app/config/rules.yaml:ro
-    depends_on:
-      ollama:
-        condition: service_healthy
-    restart: unless-stopped
-
-  ollama:
-    image: ollama/ollama
-    volumes:
       - ollama_data:/root/.ollama
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
     restart: unless-stopped
 
 volumes:

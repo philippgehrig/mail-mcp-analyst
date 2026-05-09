@@ -5,17 +5,19 @@ Automatically sort and classify your emails using a local Gemma 2B model via Oll
 ## Quick Start
 
 ```bash
-# 1. Copy and configure environment
-cp .env.example .env
-# Edit .env with your mail server credentials
-
-# 2. Copy and configure rules
-cp config/rules.example.yaml config/rules.yaml
-# Edit rules.yaml to define your sorting categories
-
-# 3. Start
-docker compose up -d
+docker run -d \
+  --name mail-map-analyst \
+  -e IMAP_HOST=imap.example.com \
+  -e SMTP_HOST=smtp.example.com \
+  -e MAIL_USER=you@example.com \
+  -e MAIL_PASSWORD=your-app-password \
+  -e MODE=daemon \
+  -v /path/to/rules.yaml:/app/config/rules.yaml:ro \
+  -v mail-analyst-ollama:/root/.ollama \
+  thisphilipp/mail-map-analyst:latest
 ```
+
+One container — includes Ollama and the Gemma 2B model. Just provide your mail credentials and a rules file.
 
 ## Configuration
 
@@ -72,8 +74,10 @@ Rules can match multiple emails, and emails can match multiple rules. If multipl
 ## Docker Hub
 
 ```bash
-docker pull philippgehrig/mail-map-analyst:latest
+docker pull thisphilipp/mail-map-analyst:latest
 ```
+
+The image bundles Ollama and automatically pulls the Gemma 2B model on first start. Mount a volume at `/root/.ollama` to persist the model between restarts.
 
 ## Development
 
