@@ -1,0 +1,25 @@
+mailbox: INBOX
+rules:
+  - name: newsletters
+    description: "Marketing emails, digests, automated content from subscriptions"
+    actions:
+      - action: move
+        target: Newsletters
+
+  - name: receipts
+    description: "Purchase confirmations, invoices, payment notifications"
+    actions:
+      - action: move
+        target: Receipts
+      - action: mark_read
+
+  - name: action-required
+    description: "Emails that explicitly ask me to do something or need a reply"
+    actions:
+      - action: flag
+    prompt: "Extract the deadline if mentioned, respond with just the date or 'none'"
+
+  - name: default
+    description: "Anything that doesn't match the above rules stays in INBOX"
+    actions:
+      - action: none
