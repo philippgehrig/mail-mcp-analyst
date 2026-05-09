@@ -5,53 +5,30 @@
 - Unraid 6.12+ with Docker enabled
 - Docker Compose plugin installed (available via Community Applications)
 
-## Step 1: Create Directory Structure
+## Step 1: Download the Project
 
-Open an Unraid terminal (or SSH in) and create the app directory:
+Open an Unraid terminal (or SSH in):
 
 ```bash
-mkdir -p /mnt/user/appdata/mail-map-analyst/config
+mkdir -p /mnt/user/appdata/mail-map-analyst
+cd /mnt/user/appdata/mail-map-analyst
+wget https://raw.githubusercontent.com/philippgehrig/mail-map-analyst/main/docker-compose.yml
+wget https://raw.githubusercontent.com/philippgehrig/mail-map-analyst/main/.env.example -O .env
+mkdir -p config
+wget https://raw.githubusercontent.com/philippgehrig/mail-map-analyst/main/config/rules.example.yaml -O config/rules.yaml
 ```
 
-## Step 2: Create Configuration Files
+This gives you everything needed — the compose file already includes both the analyst and Ollama containers.
 
-### rules.yaml
+## Step 2: Configure
 
-Create `/mnt/user/appdata/mail-map-analyst/config/rules.yaml`:
+### Edit `.env`
 
-```yaml
-mailbox: INBOX
-rules:
-  - name: newsletters
-    description: "Marketing emails, digests, automated content from subscriptions"
-    actions:
-      - action: move
-        target: Newsletters
-
-  - name: receipts
-    description: "Purchase confirmations, invoices, payment notifications"
-    actions:
-      - action: move
-        target: Receipts
-      - action: mark_read
-
-  - name: action-required
-    description: "Emails that explicitly ask me to do something or need a reply"
-    actions:
-      - action: flag
-    prompt: "Extract the deadline if mentioned, respond with just the date or 'none'"
-
-  - name: default
-    description: "Anything that doesn't match the above rules stays in INBOX"
-    actions:
-      - action: none
+```bash
+nano /mnt/user/appdata/mail-map-analyst/.env
 ```
 
-Customize the rules to match your needs.
-
-### .env
-
-Create `/mnt/user/appdata/mail-map-analyst/.env`:
+Fill in your mail server credentials:
 
 ```
 IMAP_HOST=imap.example.com
@@ -68,53 +45,24 @@ INTERVAL=15m
 LOG_LEVEL=info
 ```
 
-### docker-compose.yml
+### Edit `config/rules.yaml`
 
-Create `/mnt/user/appdata/mail-map-analyst/docker-compose.yml`:
-
-```yaml
-services:
-  analyst:
-    image: thisphilipp/mail-map-analyst:latest
-    container_name: mail-map-analyst
-    env_file: .env
-    volumes:
-      - ./config/rules.yaml:/app/config/rules.yaml:ro
-    depends_on:
-      ollama:
-        condition: service_healthy
-    restart: unless-stopped
-
-  ollama:
-    image: ollama/ollama
-    container_name: mail-map-analyst-ollama
-    volumes:
-      - ollama_data:/root/.ollama
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    restart: unless-stopped
-
-volumes:
-  ollama_data:
+```bash
+nano /mnt/user/appdata/mail-map-analyst/config/rules.yaml
 ```
 
-> **Already running Ollama?** If you have an existing Ollama container, remove the `ollama` service from the compose file and set `OLLAMA_URL=http://<unraid-ip>:11434` in your `.env` instead.
+Customize the sorting rules to your needs. See the [rules documentation](../../README.md) for all available actions.
 
-## Step 3: Start the Stack
+## Step 3: Start
 
 ```bash
 cd /mnt/user/appdata/mail-map-analyst
 docker compose up -d
 ```
 
-On first start, the analyst will pull the Gemma 2B model into Ollama automatically. This may take a few minutes depending on your internet connection.
+On first start, the Gemma 2B model is pulled automatically into Ollama. This may take a few minutes.
 
 ## Step 4: Verify
-
-Check the logs:
 
 ```bash
 docker compose logs analyst -f
@@ -128,7 +76,7 @@ You should see:
 {"ts":"...","level":"info","msg":"Daemon started","intervalMs":900000}
 ```
 
-Send yourself a test email and wait for the next poll interval. Check that it gets moved/flagged according to your rules.
+Send yourself a test email and wait for the next poll interval.
 
 ## Updating
 
@@ -138,34 +86,36 @@ docker compose pull
 docker compose up -d
 ```
 
-## Using Scheduled Mode Instead
+## Already Running Ollama?
 
-If you prefer to run the analyst periodically rather than continuously (saves resources):
+If you have an existing Ollama instance on your Unraid server, just set `OLLAMA_URL` in `.env` to point at it (e.g., `http://192.168.1.x:11434`) and remove or comment out the `ollama` service in `docker-compose.yml`.
 
-1. Set `MODE=scheduled` in your `.env`
-2. Remove the `restart: unless-stopped` from the analyst service
-3. Use Unraid's User Scripts plugin or cron to run:
+## Scheduled Mode
+
+If you prefer periodic runs over continuous operation:
+
+1. Set `MODE=scheduled` in `.env`
+2. Use Unraid's User Scripts plugin or cron:
    ```bash
-   cd /mnt/user/appdata/mail-map-analyst && docker compose up analyst
+   cd /mnt/user/appdata/mail-map-analyst && docker compose run --rm analyst
    ```
-   on your desired schedule (e.g., every 15 minutes).
 
 ## Troubleshooting
 
 ### Container won't start
-- Check that all required environment variables are set in `.env`
-- Verify the rules.yaml path is correct: `docker compose config` will show resolved paths
+- Check all required variables are set: `docker compose config`
+- Verify rules.yaml syntax: look for YAML indentation errors
 
 ### "Cannot reach Ollama" error
 - Check Ollama is healthy: `docker compose ps`
-- If using an external Ollama, verify the URL and that it's reachable from the analyst container
+- Wait for the healthcheck to pass (up to 50 seconds on first boot)
 
 ### Emails not being sorted
-- Set `LOG_LEVEL=debug` in `.env` and restart for detailed classification output
-- Verify your IMAP credentials work (test with another email client)
-- Ensure the mailbox name in `rules.yaml` matches your server (usually `INBOX`)
+- Set `LOG_LEVEL=debug` for detailed classification output
+- Verify your IMAP credentials work with another email client
+- Ensure `mailbox` in rules.yaml matches your server (usually `INBOX`)
 
 ### Gmail / Google Workspace
 - Enable IMAP in Gmail settings
-- Use an [App Password](https://myaccount.google.com/apppasswords) instead of your regular password
-- IMAP host: `imap.gmail.com`, SMTP host: `smtp.gmail.com`
+- Use an [App Password](https://myaccount.google.com/apppasswords) — regular passwords won't work
+- IMAP: `imap.gmail.com:993`, SMTP: `smtp.gmail.com:587`
