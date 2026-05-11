@@ -1,6 +1,6 @@
 # mail-map-analyst
 
-Docker-based email sorting using local Gemma model via Ollama + mail-mcp.
+Docker-based email sorting using an external Ollama instance + mail-mcp.
 
 ## Commands
 
@@ -8,7 +8,7 @@ Docker-based email sorting using local Gemma model via Ollama + mail-mcp.
 - `npm run build` — compile TypeScript
 - `npm run test` — run unit tests
 - `npm run test:integration` — run integration tests (requires Docker)
-- `docker run` — start container (includes Ollama)
+- `docker compose up` — start analyst + Ollama containers
 
 ## Architecture
 

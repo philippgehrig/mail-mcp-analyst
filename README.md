@@ -4,20 +4,37 @@ Automatically sort and classify your emails using a local Gemma 2B model via Oll
 
 ## Quick Start
 
-```bash
-docker run -d \
-  --name mail-map-analyst \
-  -e IMAP_HOST=imap.example.com \
-  -e SMTP_HOST=smtp.example.com \
-  -e MAIL_USER=you@example.com \
-  -e MAIL_PASSWORD=your-app-password \
-  -e MODE=daemon \
-  -v /path/to/rules.yaml:/app/config/rules.yaml:ro \
-  -v mail-analyst-ollama:/root/.ollama \
-  thisphilipp/mail-map-analyst:latest
+```yaml
+# docker-compose.yml
+services:
+  analyst:
+    image: thisphilipp/mail-map-analyst:latest
+    environment:
+      - IMAP_HOST=imap.example.com
+      - SMTP_HOST=smtp.example.com
+      - MAIL_USER=you@example.com
+      - MAIL_PASSWORD=your-app-password
+      - MODE=daemon
+      - OLLAMA_URL=http://ollama:11434
+    volumes:
+      - ./rules.yaml:/app/config/rules.yaml:ro
+    depends_on:
+      - ollama
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  ollama_data:
 ```
 
-One container — includes Ollama and the Gemma 2B model. Just provide your mail credentials and a rules file.
+```bash
+docker compose up -d
+```
+
+The analyst connects to an external Ollama instance and automatically pulls the model on first start.
 
 ## Configuration
 
@@ -32,11 +49,12 @@ One container — includes Ollama and the Gemma 2B model. Just provide your mail
 | `MAIL_USER` | Email account username | *(required)* |
 | `MAIL_PASSWORD` | Email account password | *(required)* |
 | `MAIL_FROM` | Sender address for forwarded emails | `MAIL_USER` |
-| `OLLAMA_URL` | Ollama API endpoint | `http://localhost:11434` |
+| `OLLAMA_URL` | Ollama API endpoint | `http://ollama:11434` |
 | `OLLAMA_MODEL` | Model for classification | `gemma2:2b` |
 | `MODE` | `daemon` (continuous) or `scheduled` (run-once) | *(required)* |
 | `INTERVAL` | Poll interval in daemon mode | `15m` |
 | `LOG_LEVEL` | `debug`, `info`, `warn`, or `error` | `info` |
+| `TLS_REJECT_UNAUTHORIZED` | Set to `false` for self-signed mail server certs | `true` |
 
 ### Rules (rules.yaml)
 
@@ -77,7 +95,7 @@ Rules can match multiple emails, and emails can match multiple rules. If multipl
 docker pull thisphilipp/mail-map-analyst:latest
 ```
 
-The image bundles Ollama and automatically pulls the Gemma 2B model on first start. Mount a volume at `/root/.ollama` to persist the model between restarts.
+The image requires an external Ollama instance. Point `OLLAMA_URL` to your Ollama server, or use the docker-compose setup above to run one alongside the analyst.
 
 ## Development
 

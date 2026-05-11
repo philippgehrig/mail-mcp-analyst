@@ -10,6 +10,7 @@ Open an Unraid terminal and create the rules file:
 
 ```bash
 mkdir -p /mnt/user/appdata/mail-map-analyst
+mkdir -p /mnt/user/appdata/ollama
 ```
 
 Create `/mnt/user/appdata/mail-map-analyst/rules.yaml`:
@@ -42,7 +43,24 @@ rules:
       - action: none
 ```
 
-## Step 2: Add Container
+## Step 2: Add Ollama Container
+
+Go to **Docker** tab → **Add Container**:
+
+| Field | Value |
+|-------|-------|
+| **Name** | `ollama` |
+| **Repository** | `ollama/ollama:latest` |
+
+### Paths
+
+| Container Path | Host Path | Access Mode |
+|---------------|-----------|-------------|
+| `/root/.ollama` | `/mnt/user/appdata/ollama` | Read/Write |
+
+Click **Apply**. Ollama will start and be available at `http://ollama:11434` on the Docker network.
+
+## Step 3: Add mail-map-analyst Container
 
 Go to **Docker** tab → **Add Container**:
 
@@ -66,30 +84,32 @@ Add these environment variables:
 | `MODE` | `daemon` |
 | `INTERVAL` | `15m` |
 | `LOG_LEVEL` | `info` |
+| `OLLAMA_URL` | `http://ollama:11434` |
+| `OLLAMA_MODEL` | `gemma2:2b` |
+| `TLS_REJECT_UNAUTHORIZED` | `false` (only if using self-signed certs) |
 
 ### Paths
 
 | Container Path | Host Path | Access Mode |
 |---------------|-----------|-------------|
 | `/app/config/rules.yaml` | `/mnt/user/appdata/mail-map-analyst/rules.yaml` | Read Only |
-| `/root/.ollama` | `/mnt/user/appdata/mail-map-analyst/ollama` | Read/Write |
 
-The `/root/.ollama` volume persists the AI model so it doesn't re-download on container restart.
+### Networking
+
+Both containers must be on the same Docker network. By default Unraid uses `bridge` — if using a custom network, ensure both containers share it.
 
 ### Apply
 
-Click **Apply**. On first start the container will download the Gemma 2B model (~1.5 GB). This takes a few minutes.
+Click **Apply**. On first start the analyst will pull the Gemma 2B model into the Ollama container (~1.5 GB). This takes a few minutes.
 
-## Step 3: Verify
+## Step 4: Verify
 
-Click the container icon → **Logs**. You should see:
+Click the mail-map-analyst container icon → **Logs**. You should see:
 
 ```
-Waiting for Ollama to start...
-Ollama is ready
-Pulling model: gemma2:2b
-Model pulled successfully
 {"ts":"...","level":"info","msg":"Starting mail-map-analyst","mode":"daemon","model":"gemma2:2b"}
+{"ts":"...","level":"info","msg":"Pulling model","model":"gemma2:2b"}
+{"ts":"...","level":"info","msg":"Model pulled successfully"}
 {"ts":"...","level":"info","msg":"Connected to mail-mcp"}
 {"ts":"...","level":"info","msg":"Daemon started","intervalMs":900000}
 ```
@@ -109,6 +129,18 @@ docker pull thisphilipp/mail-map-analyst:latest
 ### Container won't start
 - Verify all required variables are set (IMAP_HOST, SMTP_HOST, MAIL_USER, MAIL_PASSWORD, MODE)
 - Check the rules.yaml path mapping
+- Ensure Ollama container is running and accessible
+
+### "Cannot reach Ollama" error
+- Confirm the Ollama container is running: check its logs
+- Verify `OLLAMA_URL` matches the Ollama container name (default: `http://ollama:11434`)
+- Both containers must be on the same Docker network
+
+### "Connection closed" / MCP error
+- Usually an IMAP connection issue
+- For self-hosted mail servers: set `TLS_REJECT_UNAUTHORIZED=false`
+- Verify IMAP credentials with another email client
+- Set `LOG_LEVEL=debug` for detailed error output
 
 ### Emails not being sorted
 - Set `LOG_LEVEL=debug` for classification details
