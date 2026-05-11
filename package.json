@@ -1,6 +1,6 @@
 {
   "name": "mail-map-analyst",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Docker-based email sorting using local Gemma model via Ollama",
   "type": "module",
   "main": "dist/index.js",
